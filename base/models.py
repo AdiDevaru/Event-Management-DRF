@@ -3,7 +3,7 @@ from django.contrib.auth.models import AbstractUser
 from .manager import UserProfileManager
 from django.conf import settings
 
-#USER MODEL
+# USER MODEL
 class UserProfile(AbstractUser):
     # username = models.CharField(max_length=50, unique=True, blank=True, null=True)
     username = None
@@ -19,9 +19,9 @@ class UserProfile(AbstractUser):
     objects = UserProfileManager()
     
     def __str__(self):
-        return self.full_name
+        return f'id:{self.id} - {self.full_name}' 
     
-#EVENT MODEL
+# EVENT MODEL
 class Events(models.Model):
     title = models.CharField(max_length=100)
     description = models.TextField()
@@ -35,3 +35,17 @@ class Events(models.Model):
 
     def __str__(self):
         return self.title
+    
+# RSVP Model
+class RSVP(models.Model):
+    STATUS_CHOICES = [
+        ('Going', 'Going'),
+        ('Maybe', 'Maybe'),
+        ('Not going', 'Not going'),
+    ]
+    event = models.ForeignKey(Events, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    
+    def __str__(self):
+        return f'{self.user} {self.status} for {self.event}'
