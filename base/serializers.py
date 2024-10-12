@@ -7,7 +7,7 @@ UserProfile = get_user_model()
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
-        fields = ['id', 'username', 'email', 'password', 'full_name', 'bio', 'location', 'profile_picture']
+        fields = ['id', 'email', 'password', 'full_name', 'bio', 'location', 'profile_picture']
 
     def create(self, validated_data):
         user = UserProfile(
@@ -23,7 +23,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
             instance.set_password(validated_data['password'])
         
         # Update other fields as usual
-        instance.username = validated_data.get('username', instance.username)
         instance.email = validated_data.get('email', instance.email)
         instance.full_name = validated_data.get('full_name', instance.full_name)
         instance.bio = validated_data.get('bio', instance.bio)

@@ -5,7 +5,8 @@ from django.conf import settings
 
 #USER MODEL
 class UserProfile(AbstractUser):
-    username = models.CharField(max_length=50, unique=True, blank=True, null=True)
+    # username = models.CharField(max_length=50, unique=True, blank=True, null=True)
+    username = None
     email = models.EmailField(max_length=100, unique=True)
     full_name = models.CharField(max_length=100)
     bio = models.TextField(blank=True, null=True)
@@ -13,7 +14,7 @@ class UserProfile(AbstractUser):
     profile_picture = models.CharField(max_length=100, default='default_image', null=True, blank=True)
 
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['username', 'password', 'full_name', 'bio', 'location', 'profile_picture']
+    REQUIRED_FIELDS = ['password', 'full_name', 'bio', 'location', 'profile_picture']
     
     objects = UserProfileManager()
     
