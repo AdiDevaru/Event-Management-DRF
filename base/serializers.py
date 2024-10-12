@@ -8,13 +8,17 @@ class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
         fields = ['id', 'email', 'password', 'full_name', 'bio', 'location', 'profile_picture']
+        read_only_fields = ['id']
 
     def create(self, validated_data):
         user = UserProfile(
             email=validated_data['email'],
-            username=validated_data['username'],
+            full_name=validated_data['full_name'],
+            bio=validated_data['bio'],
+            location=validated_data['location'],
+            profile_picture=validated_data['profile_picture']
         )
-        user.set_password(validated_data['password'])  # Hash the password
+        user.set_password(validated_data['password'])  # Hash the password 
         user.save()
         return user
     
@@ -34,7 +38,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return instance
     
 class EventSerializer(serializers.ModelSerializer):
-    organizer = serializers.StringRelatedField()
+    organizer = serializers.StringRelatedField() #return __str__ method of UserProfile Model
     class Meta:
         model = Events      
         fields = '__all__'
+        read_only_fields = ['organizer']
