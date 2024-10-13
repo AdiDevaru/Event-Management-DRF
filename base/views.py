@@ -1,5 +1,6 @@
 SECRET_KEY = 'adidevaru$@9182'
 from django.shortcuts import redirect, get_object_or_404
+from django.urls import reverse
 # from pprint import pprint
 
 from rest_framework.viewsets import  ModelViewSet
@@ -8,9 +9,10 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, AllowAny
 from rest_framework.decorators import action
 
-from .models import Events, RSVP, Review
-from .serializers import UserProfileSerializer, EventSerializer, RSVPSerializer, ReviewSerializer
-from .permissions import IsUserOrReadOnly, IsOrganizerOrReadOnly, IsOwnerOrReadOnly
+from .models import Events, RSVP, Review, Invitations
+from .serializers import UserProfileSerializer, EventSerializer, RSVPSerializer, ReviewSerializer, InvitationSerializer, BulkInvitationSerializer
+from .permissions import IsUserOrReadOnly, IsOrganizerOrReadOnly, IsOwnerOrReadOnly, IsEventOrganizerInvitation
+# , IsInvited
 
 from django.contrib.auth import get_user_model
 UserProfile = get_user_model()
@@ -41,7 +43,7 @@ class UserProfileViews(ModelViewSet):
         
         payload = {'id': user.id}
         token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
-        response = Response({'mssg': 'Successfully logged in'}, status=200)
+        response = Response({'mssg': 'Successfully logged in'}, status=201)
         response.set_cookie(key='jwt', value=token, httponly=True)
         
         return response
@@ -95,10 +97,21 @@ class EventViewSet(ModelViewSet):
     queryset = Events.objects.all()
     serializer_class = EventSerializer
     permission_classes = [IsOrganizerOrReadOnly]
-    
-    def perform_create(self, serializer):
-        serializer.save(organizer=self.request.user)
-    
+                    
+    def create(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        event = serializer.save(organizer=self.request.user)
+        
+        if event.is_public:
+            return Response(serializer.data, status=201)
+        
+        invitation_url = f'/api/events/{event.id}/invitations'
+        return redirect(invitation_url)
+        return Response({
+            'mssg': 'Succesfully created a private event',
+            'redirect_url': invitation_url,
+        }, status=201)
 
 # RSVP VIEW SET
 class RSVPViewSet(ModelViewSet):
@@ -258,4 +271,68 @@ class ReviewViewSet(ModelViewSet):
         review.delete()
         return Response({'mssg': 'Successfully Deleted'}, status=204)
     
+
+# INVITATIONS VIEW SET
+class InvitationViewSet(ModelViewSet):
+    queryset = Invitations.objects.all()
+    serializer_class = InvitationSerializer
+    permission_classes = [IsEventOrganizerInvitation]
     
+    @action(detail=False, methods=['get'], url_path='invitations')
+    def get_invitations(self, request, pk=None):
+        event = get_object_or_404(Events, pk=pk)
+        
+        if event.is_public:
+            return Response({'mssg': "No invitations for public event"}, status=400)
+        
+        if event.organizer != request.user:
+            return Response({'error': "Cannot view this"}, status=403)
+        
+        invitations = Invitations.objects.filter(event=event)
+        serializer = InvitationSerializer(invitations, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'], url_path='invitations')
+    def post_invitations(self, request, pk=None):
+        event = get_object_or_404(Events, pk=pk)
+        
+        if event.is_public:
+            return Response({'error': "Cannot create invitations for public events"}, status=403)
+        
+        if event.organizer != request.user:
+             return Response({"error": "Only organizer can make invitations"}, status=403)
+        
+        serializer = BulkInvitationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user_ids = serializer.validated_data['user_ids']
+        
+        invitation_list = []
+        for id in user_ids:
+            user = get_object_or_404(UserProfile, pk=id)
+            invitation = Invitations.objects.create(event=event, user=user)
+            invitation_list.append(invitation)
+        
+        invitation_serializer = InvitationSerializer(invitation_list, many=True)
+        return Response(invitation_serializer.data, status=201)
+    
+    @action(detail=True, methods=['get'], url_path='invitations/(?P<invitation_id>[^/.]+)')
+    def get_invitation_details(self, request, pk=None, invitation_id=None):
+        event = get_object_or_404(Events, pk=pk)
+        
+        if event.organizer != request.user:
+            return Response({"error": "You cannot view invitations"}, status=403)
+        
+        invitation = get_object_or_404(Invitations, pk=invitation_id)
+        
+        serializer = InvitationSerializer(invitation)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['delete'], url_path='invitations/(?P<invitation_id>[^/.]+)')
+    def delete_invitation(self, request, pk=None, invitation_id=None):
+        event = get_object_or_404(Events, pk=pk)
+        invitation = get_object_or_404(Invitations, pk=invitation_id)
+        
+        if event.organizer != self.request.user:
+            return Response({"error": "You cannot delete invitations"}, status=403)
+        invitation.delete()
+        return Response({'mssg': 'Successfully Deleted'}, status=204)

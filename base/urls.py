@@ -29,11 +29,23 @@ review_update = views.ReviewViewSet.as_view({
     'delete': 'delete_review',
 })
 
+invitation_add = views.InvitationViewSet.as_view({
+    'get': 'get_invitations',
+    'post': 'post_invitations',
+})
+
+invitation_delete = views.InvitationViewSet.as_view({
+    'get': 'get_invitation_details',
+    'delete': 'delete_invitation',
+})
+
 urlpatterns = [
     path('', views.UserLoginView.as_view()),
     path('api/', include(router.urls)),
     path('api/events/<int:pk>/rsvp/', rsvp_add),
     path('api/events/<int:pk>/rsvp/<int:user_id>/', rsvp_update),
     path('api/events/<int:pk>/reviews/', review_add),
-    path('api/events/<int:pk>/reviews/<int:review_id>', review_update),
+    path('api/events/<int:pk>/reviews/<int:review_id>/', review_update),
+    path('api/events/<int:pk>/invitations/', invitation_add),
+    path('api/events/<int:pk>/invitations/<int:invitation_id>', invitation_delete),
 ]

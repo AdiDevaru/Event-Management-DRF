@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Events, RSVP, Review
+from .models import Events, RSVP, Review, Invitations
 
 from django.contrib.auth import get_user_model
 UserProfile = get_user_model()
@@ -61,3 +61,14 @@ class ReviewSerializer(serializers.ModelSerializer):
         model = Review
         fields = '__all__'
         read_only_fields = ['user', 'event']
+        
+# Invitations Serializer
+class InvitationSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField() # return __str__ method of UserProfile Model
+    event = serializers.StringRelatedField() # return __str__ method of Events Model
+    class Meta:
+        model = Invitations
+        fields = ['id', 'event', 'user']
+        
+class BulkInvitationSerializer(serializers.Serializer):
+    user_ids = serializers.ListField(child=serializers.IntegerField())
