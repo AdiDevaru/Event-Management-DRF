@@ -27,6 +27,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
+# USER MODEL
 AUTH_USER_MODEL = 'base.UserProfile'
 
 # Application definition
@@ -128,11 +129,11 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
-    #Set default authentication class
+    # Set default authentication class
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'base.authentication.JWTAuthentication', 
     ),
-    #Set default permission class
+    # Set default permission class
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ),

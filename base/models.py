@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from .manager import UserProfileManager
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 
 # USER MODEL
 class UserProfile(AbstractUser):
@@ -19,7 +20,7 @@ class UserProfile(AbstractUser):
     objects = UserProfileManager()
     
     def __str__(self):
-        return f'id:{self.id} - {self.full_name}' 
+        return f'ID:{self.id}-{self.full_name}' 
     
 # EVENT MODEL
 class Events(models.Model):
@@ -49,3 +50,15 @@ class RSVP(models.Model):
     
     def __str__(self):
         return f'{self.user} {self.status} for {self.event}'
+    
+# REVIEW Model
+class Review(models.Model):
+    event = models.ForeignKey(Events, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    rating = models.IntegerField(default=1, validators=[MaxValueValidator(10), MinValueValidator(1)])
+    comment = models.TextField()
+    
+    def __str__(self):
+        return f'{self.user} rated {self.rating} for {self.event}'
+    
+    

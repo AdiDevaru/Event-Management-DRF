@@ -1,7 +1,7 @@
 from rest_framework import permissions
 
-class IsOwnerOrReadOnly(permissions.BasePermission):
-    # Allow GET request for wveryone and POST, PUT, PATCH and DELETE requests for owners
+class IsUserOrReadOnly(permissions.BasePermission):
+    # Allow GET request for every user and POST, PUT, PATCH and DELETE requests for owners
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
@@ -22,7 +22,7 @@ class IsOrganizerOrReadOnly(permissions.BasePermission):
 
         return obj.organizer == request.user
     
-class IsRSVPUserOrReadOnly(permissions.BasePermission):
+class IsOwnerOrReadOnly(permissions.BasePermission):
     # Allow POST request for authenticated users and only GET request for unauthenticated users
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:  
@@ -31,7 +31,4 @@ class IsRSVPUserOrReadOnly(permissions.BasePermission):
     
     # Allow update and delete of RSVP objects by user
     def has_object_permission(self, request, view, obj):
-        # if request.method in permissions.SAFE_METHODS:
-        #     return True
-
         return obj.user == request.user

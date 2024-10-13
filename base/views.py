@@ -1,22 +1,22 @@
-from django.shortcuts import redirect, get_object_or_404
 SECRET_KEY = 'adidevaru$@9182'
+from django.shortcuts import redirect, get_object_or_404
+# from pprint import pprint
 
-from rest_framework.viewsets import ViewSet, ModelViewSet
+from rest_framework.viewsets import  ModelViewSet
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, AllowAny
-from rest_framework import permissions
 from rest_framework.decorators import action
 
-from .models import Events, RSVP
-from .serializers import UserProfileSerializer, EventSerializer, RSVPSerializer
-from .permissions import IsOwnerOrReadOnly, IsOrganizerOrReadOnly, IsRSVPUserOrReadOnly
+from .models import Events, RSVP, Review
+from .serializers import UserProfileSerializer, EventSerializer, RSVPSerializer, ReviewSerializer
+from .permissions import IsUserOrReadOnly, IsOrganizerOrReadOnly, IsOwnerOrReadOnly
 
 from django.contrib.auth import get_user_model
 UserProfile = get_user_model()
 import jwt
-# from pprint import pprint
-
+ 
+ 
 # USER VIEW SET
 class UserProfileViews(ModelViewSet):
     queryset = UserProfile.objects.all()
@@ -41,9 +41,8 @@ class UserProfileViews(ModelViewSet):
         
         payload = {'id': user.id}
         token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
-        response = Response()
+        response = Response({'mssg': 'Successfully logged in'}, status=200)
         response.set_cookie(key='jwt', value=token, httponly=True)
-        response.data = {'mssg': 'Successfully logged in'} 
         
         return response
     
@@ -56,9 +55,10 @@ class UserProfileViews(ModelViewSet):
             response = Response({'detail': 'User deleted successfully.'}, status=204)
             response.delete_cookie('jwt')
             return response
-        else:
-            return Response({'error': 'You cannot delete another user.'}, status=403)
-
+        
+        return Response({'error': 'You cannot delete another user.'}, status=403)
+ 
+ 
 # User LOGIN  
 class UserLoginView(APIView):
     authentication_classes = []  
@@ -68,33 +68,29 @@ class UserLoginView(APIView):
         if request.COOKIES.get('jwt') is not None:
             return Response({"mssg": "Already Logged in"}, status=403)
              
-            
         email = request.data['email']
         password = request.data['password']
         
         user = UserProfile.objects.filter(email=email).first()
         
-        if not user:
+        if not user or not user.check_password(password):
             return Response({'error': 'Invalid Credentials'}, status=401)
         
-        if not user.check_password(password):
-            return Response({'error': 'Invalid Credentials'}, status=401)
-        
+        # JWT Authentication
         payload = {
             'id': user.id,
         }
         
         token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
         
-        response = Response()
-        response.set_cookie(key='jwt', value=token, httponly=True)
-        response.data = {'mssg': 'Successfully logged in'} 
+        response = Response({'mssg': 'Successfully logged in'}, status=200)
+        response.set_cookie(key='jwt', value=token, httponly=True) 
         
         # return redirect('/api')
         return response
         
 
-# EVENT VIEW SET
+# EVENTS VIEW SET
 class EventViewSet(ModelViewSet):
     queryset = Events.objects.all()
     serializer_class = EventSerializer
@@ -104,13 +100,14 @@ class EventViewSet(ModelViewSet):
         serializer.save(organizer=self.request.user)
     
 
-#RSVP VIEW SET
+# RSVP VIEW SET
 class RSVPViewSet(ModelViewSet):
     queryset = RSVP.objects.all()
     serializer_class = RSVPSerializer
-    permission_classes = [IsRSVPUserOrReadOnly]
+    permission_classes = [IsOwnerOrReadOnly]
     
-    @action(detail=True, methods=['get'], url_path='rsvp')
+    # GET /events/{event_id}/rsvp/
+    @action(detail=False, methods=['get'], url_path='rsvp')
     def list_rsvps(self, request, pk=None):
         event = get_object_or_404(Events, pk=pk)
         rsvps = RSVP.objects.filter(event=event)
@@ -135,7 +132,9 @@ class RSVPViewSet(ModelViewSet):
         rsvp = RSVP.objects.create(user=user, event=event, status=status)
         serializer = RSVPSerializer(rsvp)
         return Response(serializer.data, status=201)
-
+ 
+ 
+    # GET /events/{event_id}/rsvp/{user_id}/
     @action(detail=True, methods=['get'], url_path='rsvp/(?P<user_id>[^/.]+)')
     def get_rsvp(self, request, pk=None, user_id=None):
         event = get_object_or_404(Events, pk=pk)
@@ -177,3 +176,86 @@ class RSVPViewSet(ModelViewSet):
             return Response({"error": "You cannot delete other's RSVP"}, status=403)
         rsvp.delete()
         return Response({'mssg': 'Successfully Deleted'}, status=204)
+
+
+# REVIEW VIEW SET
+class ReviewViewSet(ModelViewSet):
+    queryset = Review
+    serializer_class = ReviewSerializer
+    permission_classes = [IsOwnerOrReadOnly]
+    
+    # GET /events/{event_id}/reviews/
+    @action(detail=False, methods=['get'], url_path='reviews')
+    def get_review(self, request, pk):
+        event = get_object_or_404(Events, pk=pk)
+        reviews = Review.objects.filter(event=event)
+        serializer = ReviewSerializer(reviews, many=True)
+        if serializer.data == []:
+            return Response({'mssg': "No Comments's yet"})
+        return Response(serializer.data)
+    
+    # POST /events/{event_id}/reviews/
+    @action(detail=True, methods=['post'], url_path='reviews')
+    def post_review(self, request, pk):
+        event = get_object_or_404(Events, pk=pk)
+        user = request.user
+        rating = request.data.get('rating')
+        comment = request.data.get('comment')
+        
+        existing_review = Review.objects.filter(user=user, event=event).first()
+        if existing_review:
+            return Response({"mssg": "You have already commented on this event."}, status=400)
+        
+        try:
+            review = Review.objects.create(event=event, user=user, rating=rating, comment=comment)
+            serializer = ReviewSerializer(review)
+            return Response(serializer.data, status=201)
+        except:
+            return Response({'error': "Please enter valid details"})
+            
+    
+    # GET /events/{event_id}/reviews/{user_id}/
+    @action(detail=True, methods=['get'], url_path='reviews/(?P<review_id>[^/.]+)')
+    def get_review_details(self, request, pk=None, review_id=None):
+        event = get_object_or_404(Events, pk=pk)
+        reviews = get_object_or_404(Review, pk=review_id)
+        
+        serializer = ReviewSerializer(reviews)
+        return Response(serializer.data)
+    
+    # PUT /events/{event_id}/reviews/{user_id}/
+    @action(detail=True, methods=['put'], url_path='reviews/(?P<review_id>[^/.]+)')
+    def update_review(self, request, pk=None, review_id=None):
+        event = get_object_or_404(Events, pk=pk)
+        review = get_object_or_404(Review, pk=review_id)
+        user = review.user
+
+        if user != self.request.user:
+            return Response({"error": "You cannot update other's Review"}, status=403)
+       
+        rating = request.data.get('rating')
+        comment = request.data.get('comment')
+
+        # Update REVIEW status
+        try:
+            review.rating = rating
+            review.comment = comment
+            review.save()
+            serializer = ReviewSerializer(review)
+            return Response(serializer.data, status=200)
+        except:
+            return Response({'error': "Please enter valid details"})
+            
+    # DELETE /events/{event_id}/reviews/{user_id}/
+    @action(detail=True, methods=['delete'], url_path='reviews/(?P<review_id>[^/.]+)')
+    def delete_review(self, request, pk=None, review_id=None):
+        event = get_object_or_404(Events, pk=pk)
+        review = get_object_or_404(Review, pk=review_id)
+        user = review.user
+        
+        if user != self.request.user:
+            return Response({"error": "You cannot delete other's Review"}, status=403)
+        review.delete()
+        return Response({'mssg': 'Successfully Deleted'}, status=204)
+    
+    
