@@ -8,11 +8,12 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, AllowAny
 from rest_framework.decorators import action
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter
 
 from .models import Events, RSVP, Review, Invitations
 from .serializers import UserProfileSerializer, EventSerializer, RSVPSerializer, ReviewSerializer, InvitationSerializer, BulkInvitationSerializer
-from .permissions import IsUserOrReadOnly, IsOrganizerOrReadOnly, IsOwnerOrReadOnly, IsEventOrganizerInvitation
-# , IsInvited
+from .permissions import IsUserOrReadOnly, IsOrganizerOrReadOnly, IsOwnerOrReadOnly, IsEventOrganizerInvitation, IsInvited
 
 from django.contrib.auth import get_user_model
 UserProfile = get_user_model()
@@ -23,7 +24,7 @@ import jwt
 class UserProfileViews(ModelViewSet):
     queryset = UserProfile.objects.all()
     serializer_class = UserProfileSerializer
-    permission_classes = [IsOwnerOrReadOnly]
+    permission_classes = [IsUserOrReadOnly]
     
     # Allow non-authenticated users to create a new UserProfile 
     def get_permissions(self):
@@ -96,8 +97,25 @@ class UserLoginView(APIView):
 class EventViewSet(ModelViewSet):
     queryset = Events.objects.all()
     serializer_class = EventSerializer
-    permission_classes = [IsOrganizerOrReadOnly]
-                    
+    permission_classes = [IsOrganizerOrReadOnly, IsInvited]
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_fields = ['title', 'location', 'organizer', 'is_public']
+    search_fields = ['title', 'location']
+    
+    def get_queryset(self):
+        user = self.request.user
+        public_events = Events.objects.filter(is_public=True)
+        
+        try:
+            private_events = Events.objects.filter(is_public=False, invitations__user=user)
+        except:
+            private_events = Events.objects.none()
+            
+        events = list(public_events) + list(private_events)
+        event_ids = [event.id for event in events]
+        return Events.objects.filter(id__in=event_ids) 
+        
+                     
     def create(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -108,10 +126,11 @@ class EventViewSet(ModelViewSet):
         
         invitation_url = f'/api/events/{event.id}/invitations'
         return redirect(invitation_url)
-        return Response({
-            'mssg': 'Succesfully created a private event',
-            'redirect_url': invitation_url,
-        }, status=201)
+        # return Response({
+        #     'mssg': 'Succesfully created a private event',
+        #     'redirect_url': invitation_url,
+        # }, status=201)
+
 
 # RSVP VIEW SET
 class RSVPViewSet(ModelViewSet):
@@ -123,6 +142,16 @@ class RSVPViewSet(ModelViewSet):
     @action(detail=False, methods=['get'], url_path='rsvp')
     def list_rsvps(self, request, pk=None):
         event = get_object_or_404(Events, pk=pk)
+        
+        if not event.is_public:
+            if Invitations.objects.filter(event=event, user=request.user).exists():
+                rsvps = RSVP.objects.filter(event=event)
+                serializer = RSVPSerializer(rsvps, many=True)
+                if serializer.data == []:
+                    return Response({'mssg': "No RSVP's yet"})
+                return Response(serializer.data)
+            return Response({"error": "Cannot view this page"}, status=403)
+        
         rsvps = RSVP.objects.filter(event=event)
         serializer = RSVPSerializer(rsvps, many=True)
         if serializer.data == []:
@@ -145,12 +174,22 @@ class RSVPViewSet(ModelViewSet):
         rsvp = RSVP.objects.create(user=user, event=event, status=status)
         serializer = RSVPSerializer(rsvp)
         return Response(serializer.data, status=201)
- 
+
  
     # GET /events/{event_id}/rsvp/{user_id}/
     @action(detail=True, methods=['get'], url_path='rsvp/(?P<user_id>[^/.]+)')
     def get_rsvp(self, request, pk=None, user_id=None):
         event = get_object_or_404(Events, pk=pk)
+        
+        if not event.is_public:
+            if Invitations.objects.filter(event=event, user=request.user).exists():
+                rsvps = RSVP.objects.filter(event=event)
+                serializer = RSVPSerializer(rsvps, many=True)
+                if serializer.data == []:
+                    return Response({'mssg': "No RSVP's yet"})
+                return Response(serializer.data)
+            return Response({"error": "Cannot view this page"}, status=403)
+        
         user = get_object_or_404(UserProfile, pk=user_id)
         rsvp = get_object_or_404(RSVP, event=event, user=user)
         serializer = RSVPSerializer(rsvp)
@@ -201,10 +240,20 @@ class ReviewViewSet(ModelViewSet):
     @action(detail=False, methods=['get'], url_path='reviews')
     def get_review(self, request, pk):
         event = get_object_or_404(Events, pk=pk)
+        
+        if not event.is_public:
+            if Invitations.objects.filter(event=event, user=request.user).exists():
+                reviews = Review.objects.filter(event=event)
+                serializer = ReviewSerializer(reviews, many=True)
+                if serializer.data == []:
+                    return Response({'mssg': "No comments yet"})
+                return Response(serializer.data)
+            return Response({"error": "Cannot view this page"}, status=403)
+        
         reviews = Review.objects.filter(event=event)
         serializer = ReviewSerializer(reviews, many=True)
         if serializer.data == []:
-            return Response({'mssg': "No Comments's yet"})
+            return Response({'mssg': "No comments yet"})
         return Response(serializer.data)
     
     # POST /events/{event_id}/reviews/
@@ -215,10 +264,6 @@ class ReviewViewSet(ModelViewSet):
         rating = request.data.get('rating')
         comment = request.data.get('comment')
         
-        existing_review = Review.objects.filter(user=user, event=event).first()
-        if existing_review:
-            return Response({"mssg": "You have already commented on this event."}, status=400)
-        
         try:
             review = Review.objects.create(event=event, user=user, rating=rating, comment=comment)
             serializer = ReviewSerializer(review)
@@ -226,17 +271,25 @@ class ReviewViewSet(ModelViewSet):
         except:
             return Response({'error': "Please enter valid details"})
             
-    
-    # GET /events/{event_id}/reviews/{user_id}/
+    # GET /events/{event_id}/reviews/{review_id}/
     @action(detail=True, methods=['get'], url_path='reviews/(?P<review_id>[^/.]+)')
     def get_review_details(self, request, pk=None, review_id=None):
         event = get_object_or_404(Events, pk=pk)
-        reviews = get_object_or_404(Review, pk=review_id)
         
+        if not event.is_public:
+            if Invitations.objects.filter(event=event, user=request.user).exists():
+                reviews = get_object_or_404(Review, pk=review_id)
+                serializer = ReviewSerializer(reviews)
+                if serializer.data == []:
+                    return Response({'mssg': "No comments yet"})
+                return Response(serializer.data)
+            return Response({"error": "Cannot view this page"}, status=403)
+        
+        reviews = get_object_or_404(Review, pk=review_id)
         serializer = ReviewSerializer(reviews)
         return Response(serializer.data)
     
-    # PUT /events/{event_id}/reviews/{user_id}/
+    # PUT /events/{event_id}/reviews/{review_id}/
     @action(detail=True, methods=['put'], url_path='reviews/(?P<review_id>[^/.]+)')
     def update_review(self, request, pk=None, review_id=None):
         event = get_object_or_404(Events, pk=pk)
@@ -259,7 +312,7 @@ class ReviewViewSet(ModelViewSet):
         except:
             return Response({'error': "Please enter valid details"})
             
-    # DELETE /events/{event_id}/reviews/{user_id}/
+    # DELETE /events/{event_id}/reviews/{review_id}/
     @action(detail=True, methods=['delete'], url_path='reviews/(?P<review_id>[^/.]+)')
     def delete_review(self, request, pk=None, review_id=None):
         event = get_object_or_404(Events, pk=pk)
@@ -304,13 +357,22 @@ class InvitationViewSet(ModelViewSet):
         
         serializer = BulkInvitationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user_ids = serializer.validated_data['user_ids']
+        user_id = serializer.validated_data['user_ids']
+        
         
         invitation_list = []
-        for id in user_ids:
+        for id in user_id:
             user = get_object_or_404(UserProfile, pk=id)
             invitation = Invitations.objects.create(event=event, user=user)
             invitation_list.append(invitation)
+        
+        # Invite Self if not already present
+        if Invitations.objects.filter(event=event, user=event.organizer).exists():
+            invitation_serializer = InvitationSerializer(invitation_list, many=True)
+            return Response(invitation_serializer.data, status=201)  
+        
+        invitation = Invitations.objects.create(event=event, user=event.organizer)
+        invitation_list.append(invitation)
         
         invitation_serializer = InvitationSerializer(invitation_list, many=True)
         return Response(invitation_serializer.data, status=201)

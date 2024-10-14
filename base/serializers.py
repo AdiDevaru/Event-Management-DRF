@@ -8,16 +8,16 @@ UserProfile = get_user_model()
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
-        fields = ['id', 'email', 'password', 'full_name', 'bio', 'location', 'profile_picture']
+        fields = ['id', 'email', 'password', 'full_name', 'bio', 'location', 'profile_image']
         read_only_fields = ['id']
-
+    
     def create(self, validated_data):
         user = UserProfile(
             email=validated_data['email'],
             full_name=validated_data['full_name'],
             bio=validated_data['bio'],
             location=validated_data['location'],
-            profile_picture=validated_data['profile_picture']
+            profile_image=validated_data['profile_image']
         )
         user.set_password(validated_data['password'])  # Store hashed password 
         user.save()
@@ -32,7 +32,11 @@ class UserProfileSerializer(serializers.ModelSerializer):
         instance.full_name = validated_data.get('full_name', instance.full_name)
         instance.bio = validated_data.get('bio', instance.bio)
         instance.location = validated_data.get('location', instance.location)
-        instance.profile_picture = validated_data.get('profile_picture', instance.profile_picture)
+        
+        profile_image = validated_data.get('profile_image', None)
+        if profile_image:
+            instance.profile_image = profile_image  # Update if new image is provided
+            
         instance.save()
         return instance
 
@@ -71,4 +75,4 @@ class InvitationSerializer(serializers.ModelSerializer):
         fields = ['id', 'event', 'user']
         
 class BulkInvitationSerializer(serializers.Serializer):
-    user_ids = serializers.ListField(child=serializers.IntegerField())
+    user_id = serializers.ListField(child=serializers.IntegerField())

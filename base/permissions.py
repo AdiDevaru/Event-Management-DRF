@@ -38,8 +38,8 @@ class IsEventOrganizerInvitation(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         return obj.event.organizer == request.user
     
-# class IsInvited(permissions.BasePermission):
-#     def has_object_permission(self, request, view, obj):
-#         if obj.is_public:
-#             return True
-#         return Invitations.objects.filter(event=obj, user=request.user).exists()
+class IsInvited(permissions.BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if obj.is_public:
+            return True
+        return Invitations.objects.filter(event=obj, user=request.user).exists()

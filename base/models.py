@@ -6,14 +6,13 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 
 # USER MODEL
 class UserProfile(AbstractUser):
-    # username = models.CharField(max_length=50, unique=True, blank=True, null=True)
     username = None
     email = models.EmailField(max_length=100, unique=True)
     full_name = models.CharField(max_length=100)
     bio = models.TextField(blank=True, null=True)
     location = models.CharField(max_length=100, blank=True, null=True)
-    profile_picture = models.CharField(max_length=100, default='default_image', null=True, blank=True)
-
+    profile_image = models.ImageField(default='images/default.svg', upload_to='images', null = True, blank = True)
+    
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['password', 'full_name', 'bio', 'location', 'profile_picture']
     
